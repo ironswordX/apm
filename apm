@@ -1,0 +1,321 @@
+#!/bin/bash
+ver=1.0
+
+RESET=$'\033[0m'
+BLACK=$'\033[90m'
+RED=$'\033[91m'
+GREEN=$'\033[92m'
+YELLOW=$'\033[93m'
+BLUE=$'\033[94m'
+MAGENTA=$'\033[95m'
+CYAN=$'\033[96m'
+WHITE=$'\033[97m'
+
+VERBOSE=0
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		-v|--version)
+			echo "$ver"
+			exit 0
+			;;
+		-h|--help)
+			echo "help text"
+			exit 0
+			;;
+		--verbose)
+			VERBOSE=1
+			shift
+			;;
+		*)
+			break
+			;;
+	esac
+done
+
+VERB="$1"
+shift
+
+verbose() {
+        if [[ $VERBOSE -eq 1 ]]; then
+                printf "%bVERBOSE%b: %b%s%b\n" "$CYAN" "$RESET" "$WHITE" "$*" "$RESET"
+        fi
+}
+
+info() {
+	local nl="\n"
+	[[ "$2" -eq 1 ]] && nl=""
+	local pre="::"
+	[[ "$3" -eq 1 ]] && pre=""
+	printf "%b${pre}%b %b%s%b${nl}" "$WHITE" "$RESET" "$WHITE" "$1" "$RESET"
+}
+
+warn() {
+        printf "%bWARN%b: %b%s%b\n" "$YELLOW" "$RESET" "$WHITE" "$*" "$RESET"
+}
+
+error() {
+        printf "%bERROR%b: %b%s%b\n" "$RED" "$RESET" "$WHITE" "$*" "$RESET"
+}
+
+
+join() {
+	local sep="$1"
+	shift
+	local IFS="$sep"
+	echo "$*"
+}
+
+escalate() {
+	if [[ $(id -u) -eq 0 ]]; then
+		verbose "Running as root, not using any priv escalation tool"
+		"$@"
+		return
+	fi
+	if command -v sudo >/dev/null 2>&1; then
+		verbose "Using sudo for priv escalation"
+		sudo "$@"
+	elif command -v doas >/dev/null 2>&1; then
+		verbose "Using doas for priv escalation"
+		doas "$@"
+	else
+		verbose "Priv escalation helper list exhausted"
+		echo "ERROR: neither sudo nor doas found"
+		exit 1
+	fi
+}
+
+transaction() {
+	local verb=$1
+	shift
+	case "$verb" in
+		confirm)
+			i=1
+			for arg in "$@"; do
+				if [ "$i" -eq "$#" ]; then
+					printf "%b=> $arg [y/n]: " "$WHITE"
+				else
+					info "$arg"
+				fi
+				i=$((i + 1))
+			done
+			read yn
+			case $yn in
+				[Yy]* )
+					printf "%b" "$RESET"
+					return 0
+					;;
+				[Nn]* )
+					printf "%b" "$RESET"
+					return 1
+					;;
+				* )
+					printf "%b" "$RESET"
+					if [[ -z "$yn" ]]; then
+						return 0
+					else
+						error "'$yn' is not a valid option"
+						exit 255
+					fi
+					;;
+			esac
+			;;
+		error)
+			[[ $VERBOSE -eq 1 ]] && error $1
+			[[ $VERBOSE -eq 0 ]] && error $2
+			exit $3
+			;;
+		* )
+			error "INTERNAL: unknown transaction helper verb '$verb'"
+			exit 1
+			;;
+	esac
+}
+
+case "$VERB" in
+	i|install)
+		if [[ $# -eq 0 ]]; then
+			info "No packages to install!"
+			exit 0
+		fi
+		info "Querying package index..." 1 0
+		valid_pkgs=()
+		valid_pkgs_str=""
+		valid_pkgs_sep=""
+		invalid_pkgs=()
+		invalid_pkgs_str=""
+		invalid_pkgs_sep=""
+		for pkg in "$@"; do
+			if [[ -z "$(apk query "$pkg" 2>/dev/null)" ]]; then
+				invalid_pkgs+=("$pkg")
+				invalid_pkgs_str+="${invalid_pkgs_sep}${pkg}"
+				invalid_pkgs_sep=", "
+			else
+				valid_pkgs+=("$pkg")
+				valid_pkgs_str+="${valid_pkgs_sep}${pkg}"
+				valid_pkgs_sep=", "
+			fi
+		done
+		info "done" 0 1
+		if [[ ${#invalid_pkgs[@]} -ne 0 ]]; then
+			error "One or more packages were not found: $invalid_pkgs_str"
+			exit 1
+		fi
+		if transaction confirm "The following package(s) will be installed: $valid_pkgs_str" "Install them?"; then
+			escalate apk add "${valid_pkgs[@]}"
+			code=$?
+			if [ $code -ne 0 ]; then
+				transaction error "apk add failed with code $code" "Transaction failed with code $code" "$code"
+			else
+				info "Transaction completed!"
+				exit
+			fi
+		else
+			transaction error "Aborted by user" "Transaction aborted by user" 1
+		fi
+		;;
+	uninstall)
+		if [[ $# -eq 0 ]]; then
+			info "No packages to uninstall!"
+			exit 0
+		fi
+		joined=""
+		sep=""
+		pkgs=()
+		for pkg in "$@"; do
+			if [[ -z "$(apk query --installed "$pkg" 2>/dev/null)" ]]; then
+				warn "Package $pkg is not installed, skipping!" 
+			else
+				pkgs+=("$pkg")
+				joined="${joined}${sep}${pkg}"
+				sep=", "
+			fi
+		done
+		if [[ ${#pkgs[@]} -eq 0 ]]; then
+			info "No packages to uninstall!"
+			exit 0
+		fi
+		if transaction confirm "The following package(s) will be uninstalled: $joined" "Uninstall them?"; then
+			escalate apk del "${pkgs[@]}"
+			code=$?
+			if [ $code -ne 0 ]; then
+				transaction error "apk del failed with code $code" "Transaction failed with code $code" "$code"
+			else
+				info "Transaction completed!"
+				exit
+			fi
+		else
+			transaction error "Aborted by user" "Transaction aborted by user" 1
+		fi
+		;;
+	cache)
+		verb2=$1
+		shift
+		case "$verb2" in
+			sync)
+				info "Synchronising apk cache..."
+				escalate apk cache -v sync
+				code=$?
+				if [ $code -ne 0 ]; then
+					transaction error "`apk cache -v sync` failed with code $code" "Transaction failed with code $code" $code
+					exit $code
+				fi
+				exit
+				;;
+			clean)
+				info "Cleaning apk cache..."
+				escalate apk cache clean
+				code=$?
+				if [ $code -ne 0 ]; then
+					transaction error "`apk cache clean` failed with code $code" "Transaction failed with code $code" $code
+				fi
+				exit
+				;;
+		esac
+		;;
+	u|update)
+		info "Updating package index..."
+		escalate apk update
+		code=$?
+		if [ $code -ne 0 ]; then
+			[[ $VERBOSE -eq 1 ]] && error "apk update failed with code $code"
+			error "Failed to update! Could not update package index"
+			exit $code
+		fi
+		info "Upgrading packages..."
+		escalate apk upgrade
+		code=$?
+		if [ $code -ne 0 ]; then
+			[[ $VERBOSE -eq 1 ]] && error "apk upgrade failed with code $code"
+			error "Failed to update! Could not upgrade packages"
+			exit $code
+		fi
+		info "Finished updating!"
+		exit
+		;;
+	list)
+		verb2=$1
+		shift
+		case "$verb2" in
+			installed)
+				(
+					echo -e "Package\tVersion\tLicence"
+					apk query --installed "${1:-*}" --format json |
+					jq -r '.[] | "\(.name)\t\(.version)\t\(.license)"'
+				) | column -t -s $'\t'
+				exit
+				;;
+			* )
+				(
+					echo -e "Package\tVersion\tLicense"
+					apk query "${verb2:-*}" --format json |
+					jq -r '.[] | "\(.name)\t\(.version)\t\(.license)"'
+				) | column -t -s $'\t'
+		esac
+		;;
+	repos)
+		verb2=$1
+		shift
+		case "$verb2" in
+			list)
+				awk '
+					BEGIN {
+						printf "%-12s %s\n", "REPOSITORY", "MIRROR URL"
+						printf "%-12s %s\n", "------------", "----------------------------------------"
+					}
+					/^#/ || NF==0 {next}
+					{
+						label="CUSTOM"
+						if ($0 ~ /edge\/main/) {
+							label="MAIN"
+						}
+						else if ($0 ~ /edge\/community/) {
+							label="COMMUNITY"
+						}
+						else if ($0 ~ /edge\/testing/) {
+							label="TESTING"
+						}
+						printf "%-12s %s\n", label, $0
+					}
+				' /etc/apk/repositories
+				exit
+				;;
+			edit)
+				info "Opening repositories file..."
+				escalate rnano /etc/apk/repositories
+				if transaction confirm "Update package index as well?"; then
+					info "Updating package index..."
+					escalate apk update
+					code=$?
+					if [ $code -ne 0 ]; then
+						[[ $VERBOSE -eq 1 ]] && error "apk upgrade failed with code $code"
+						error "Failed to update package index!"
+						exit $code
+					fi
+					exit 0
+				else
+					exit 0
+				fi
+				;;
+		esac
+		;;
+esac
