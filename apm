@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=1.0
+ver=1.0.0
 
 RESET=$'\033[0m'
 BLACK=$'\033[90m'
