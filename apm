@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=1.0.1
+ver=1.0.2
 
 RESET=$'\033[0m'
 BLACK=$'\033[90m'
@@ -236,21 +236,11 @@ case "$VERB" in
 		esac
 		;;
 	u|update)
-		info "Updating package index..."
-		escalate apk update
+		info "Updating system..."
+		escalate apk -U update
 		code=$?
 		if [ $code -ne 0 ]; then
-			[[ $VERBOSE -eq 1 ]] && error "apk update failed with code $code"
-			error "Failed to update! Could not update package index"
-			exit $code
-		fi
-		info "Upgrading packages..."
-		escalate apk upgrade
-		code=$?
-		if [ $code -ne 0 ]; then
-			[[ $VERBOSE -eq 1 ]] && error "apk upgrade failed with code $code"
-			error "Failed to update! Could not upgrade packages"
-			exit $code
+			transaction error "`apk -U update` failed with code $code" "Transaction failed with code $code" $code
 		fi
 		info "Finished updating!"
 		exit
