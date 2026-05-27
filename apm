@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=1.0.0
+ver=1.0.1
 
 RESET=$'\033[0m'
 BLACK=$'\033[90m'
@@ -71,7 +71,10 @@ escalate() {
 		"$@"
 		return
 	fi
-	if command -v sudo >/dev/null 2>&1; then
+	if command -v pkexec >/dev/null 2>&1; then
+		verbose "Using pkexec (polkit) for priv escalation"
+		pkexec "$@"
+	elif command -v sudo >/dev/null 2>&1; then
 		verbose "Using sudo for priv escalation"
 		sudo "$@"
 	elif command -v doas >/dev/null 2>&1; then
