@@ -237,10 +237,10 @@ case "$VERB" in
 		;;
 	u|update)
 		info "Updating system..."
-		escalate apk -U update
+		escalate apk -U upgrade
 		code=$?
 		if [ $code -ne 0 ]; then
-			transaction error "`apk -U update` failed with code $code" "Transaction failed with code $code" $code
+			transaction error "`apk -U upgrade` failed with code $code" "Transaction failed with code $code" $code
 		fi
 		info "Finished updating!"
 		exit
