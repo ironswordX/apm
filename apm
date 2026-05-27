@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=1.0.2
+ver=1.0.3
 
 RESET=$'\033[0m'
 BLACK=$'\033[90m'
@@ -82,7 +82,7 @@ escalate() {
 		doas "$@"
 	else
 		verbose "Priv escalation helper list exhausted"
-		echo "ERROR: neither sudo nor doas found"
+		error "Could not find a privelidge escalation tool to use!"
 		exit 1
 	fi
 }
@@ -219,9 +219,9 @@ case "$VERB" in
 				escalate apk cache -v sync
 				code=$?
 				if [ $code -ne 0 ]; then
-					transaction error "`apk cache -v sync` failed with code $code" "Transaction failed with code $code" $code
-					exit $code
+					transaction error "`apk cache -v sync` failed with code $code" "Transaction failed with code $code" "$code"
 				fi
+				info "Transaction completed!"
 				exit
 				;;
 			clean)
@@ -229,8 +229,9 @@ case "$VERB" in
 				escalate apk cache clean
 				code=$?
 				if [ $code -ne 0 ]; then
-					transaction error "`apk cache clean` failed with code $code" "Transaction failed with code $code" $code
+					transaction error "`apk cache clean` failed with code $code" "Transaction failed with code $code" "$code"
 				fi
+				info "Transaction completed!"
 				exit
 				;;
 		esac
@@ -240,7 +241,7 @@ case "$VERB" in
 		escalate apk -U upgrade
 		code=$?
 		if [ $code -ne 0 ]; then
-			transaction error "`apk -U upgrade` failed with code $code" "Transaction failed with code $code" $code
+			transaction error "`apk -U upgrade` failed with code $code" "Transaction failed with code $code" "$code"
 		fi
 		info "Finished updating!"
 		exit
@@ -269,6 +270,16 @@ case "$VERB" in
 		verb2=$1
 		shift
 		case "$verb2" in
+			update)
+				info "Updating repos..."
+				escalate apk update
+				code=$?
+				if [ $code -ne 0 ]; then
+					transaction error "`apk update` failed with code $code" "Transaction failed with code $code" "$code"
+				fi
+				info "Transaction completed!"
+				exit
+				;;
 			list)
 				awk '
 					BEGIN {
@@ -300,10 +311,9 @@ case "$VERB" in
 					escalate apk update
 					code=$?
 					if [ $code -ne 0 ]; then
-						[[ $VERBOSE -eq 1 ]] && error "apk upgrade failed with code $code"
-						error "Failed to update package index!"
-						exit $code
+						transaction error "`apk update` failed with code $code" "Transaction failed with code $code" "$code"
 					fi
+					info "Transaction completed!"
 					exit 0
 				else
 					exit 0
