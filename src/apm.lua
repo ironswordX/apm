@@ -182,31 +182,29 @@ function createTransaction()
 	end
 
 	-- command execution
-	function transaction:exec(cmd, callback)
-		transaction:verbose("Running command: " .. table.concat(cmd, " "))
-		local command = table.remove(cmd, 1)
-		uv.spawn(command, {
-			args = cmd,
+	function transaction:exec(cmd, cmd_args, callback)
+		transaction:verbose("Running command: " .. cmd .. " " .. table.concat(cmd_args, " "))
+		uv.spawn(cmd, {
+			args = cmd_args,
 			stdio = { 0, 1, 2 }
 		}, callback)
 		uv.run()
 	end
 
-	function transaction:exec_privelidged(cmd, callback)
+	function transaction:exec_privelidged(cmd, cmd_args, callback)
 		if args.auth_tool ~= "" then
-			transaction:verbose("Running command as privelidged: " .. args.auth_tool .. " " .. table.concat(cmd, " "))
+			transaction:verbose("Running command as privelidged: " .. args.auth_tool .. " " .. cmd .. " " .. table.concat(cmd_args, " "))
 			uv.spawn(args.auth_tool, {
-				args = cmd,
+				args = { cmd, table.unpack(cmd_args) },
 				stdio = { 0, 1, 2 }
 			}, callback)
 		else
 			if uv.getuid() ~= 0 then
 				transaction:fatal("Cannot use no privelidge escalation helper without running as root", 1)
 			else
-				transaction:verbose("Running command as root: " .. table.concat(cmd, " "))
-				local base = table.remove(cmd, 1)
+				transaction:verbose("Running command as root: " .. cmd .. " " .. table.concat(cmd_args, " "))
 				uv.spawn(base, {
-					args = cmd,
+					args = cmd_args,
 					stdio = { 0, 1, 2 }
 				}, callback)
 			end
@@ -237,7 +235,7 @@ if args.command == "install" then
 	transaction:log("The following packages will be installed: " .. table.concat(args.packages, ", "))
 	local prompt = transaction:confirm("Install them?", true)
 	if prompt then
-		transaction:exec_privelidged({ "apk", "add", table.unpack(args.packages) }, function(code, signal)
+		transaction:exec_privelidged("apk", { "add", table.unpack(args.packages) }, function(code, signal)
 			if code == 0 then
 				transaction:finish("Transaction completed!")
 			else
@@ -255,7 +253,7 @@ elseif args.command == "uninstall" then
 	transaction:log("The following packages will be unstalled: " .. table.concat(args.packages, ", "))
 	local prompt = transaction:confirm("Uninstall them?", true)
 	if prompt then
-		transaction:exec_privelidged({ "apk", "del", table.unpack(args.packages) }, function(code, signal)
+		transaction:exec_privelidged("apk", { "del", table.unpack(args.packages) }, function(code, signal)
 			if code == 0 then
 				transaction:finish("Transaction completed!")
 			else
@@ -269,7 +267,7 @@ elseif args.command == "uninstall" then
 elseif args.command == "update" then
 	local transaction = createTransaction()
 	transaction:log("Updating package index...")
-	transaction:exec_privelidged({ "apk", "update" }, function(code, signal)
+	transaction:exec_privelidged("apk", { "update" }, function(code, signal)
 		if code == 0 then
 			if args.repos then
 				transaction:finish("Package index updated!")
@@ -280,7 +278,7 @@ elseif args.command == "update" then
 	end)
 	if not args.repos then
 		transaction:log("Updating system...")
-		transaction:exec_privelidged({ "apk", "upgrade" }, function(code, signal)
+		transaction:exec_privelidged("apk", { "upgrade" }, function(code, signal)
 			if code == 0 then
 				transaction:finish("System updated!")
 			else
