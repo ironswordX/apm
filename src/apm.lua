@@ -1,4 +1,4 @@
-local version = "2.0.2"
+local version = "2.0.3"
 local uv = require("luv")
 --local apk = require("apk") -- apk-tool's lua bindings arent really helpful and are too much of a pain to compile
 local json = require("dkjson")
@@ -10,7 +10,7 @@ parser:flag("-v --version"):action(function()
 	print("apm v" .. version)
 	os.exit(0)
 end)
-parser:flag("-v --verbose", "Show verbose/debug output"):args(0)
+parser:flag("-V --verbose", "Show verbose/debug output"):args(0)
 parser:flag("--auth-helper", "Specify the tool to use for priveledge escalation", (uv.getuid() == 0 and "none" or "polkit"))
 	:args("1")
 	:target("auth_tool")
