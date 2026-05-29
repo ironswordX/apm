@@ -1,4 +1,4 @@
-local version = "2.0.1"
+local version = "2.0.2"
 local uv = require("luv")
 --local apk = require("apk") -- apk-tool's lua bindings arent really helpful and are too much of a pain to compile
 local json = require("dkjson")
@@ -191,7 +191,7 @@ function createTransaction()
 		uv.run()
 	end
 
-	function transaction:exec_privelidged(cmd, cmd_args, callback)
+	function transaction:exec_privileged(cmd, cmd_args, callback)
 		if args.auth_tool ~= "" then
 			transaction:verbose("Running command as privelidged: " .. args.auth_tool .. " " .. cmd .. " " .. table.concat(cmd_args, " "))
 			uv.spawn(args.auth_tool, {
@@ -235,7 +235,7 @@ if args.command == "install" then
 	transaction:log("The following packages will be installed: " .. table.concat(args.packages, ", "))
 	local prompt = transaction:confirm("Install them?", true)
 	if prompt then
-		transaction:exec_privelidged("apk", { "add", table.unpack(args.packages) }, function(code, signal)
+		transaction:exec_privileged("apk", { "add", table.unpack(args.packages) }, function(code, signal)
 			if code == 0 then
 				transaction:finish("Transaction completed!")
 			else
@@ -253,7 +253,7 @@ elseif args.command == "uninstall" then
 	transaction:log("The following packages will be unstalled: " .. table.concat(args.packages, ", "))
 	local prompt = transaction:confirm("Uninstall them?", true)
 	if prompt then
-		transaction:exec_privelidged("apk", { "del", table.unpack(args.packages) }, function(code, signal)
+		transaction:exec_privileged("apk", { "del", table.unpack(args.packages) }, function(code, signal)
 			if code == 0 then
 				transaction:finish("Transaction completed!")
 			else
@@ -267,7 +267,7 @@ elseif args.command == "uninstall" then
 elseif args.command == "update" then
 	local transaction = createTransaction()
 	transaction:log("Updating package index...")
-	transaction:exec_privelidged("apk", { "update" }, function(code, signal)
+	transaction:exec_privileged("apk", { "update" }, function(code, signal)
 		if code == 0 then
 			if args.repos then
 				transaction:finish("Package index updated!")
@@ -278,7 +278,7 @@ elseif args.command == "update" then
 	end)
 	if not args.repos then
 		transaction:log("Updating system...")
-		transaction:exec_privelidged("apk", { "upgrade" }, function(code, signal)
+		transaction:exec_privileged("apk", { "upgrade" }, function(code, signal)
 			if code == 0 then
 				transaction:finish("System updated!")
 			else
