@@ -241,7 +241,6 @@ if args.command == "install" then
 	local transaction = createTransaction()
 	local query = transaction:multi("Querying package index...")
 	local index = validate_packages_exist(args.packages, transaction)
-	os.exit(0)
 	query:finish("done")
 	transaction:log("The following packages will be installed: " .. table.concat(args.packages, ", "))
 	local prompt = transaction:confirm("Install them?", true)

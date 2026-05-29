@@ -12,8 +12,23 @@ LIBUV  := $(ROOT)/luv/build/deps/libuv/libuv.a
 
 .PHONY: all luv clean
 
-all: luv apm
+all: check-deps luv apm
 
+check-deps:
+	@if ! command -v luarocks >/dev/null 2>&1; then \
+		echo "luarocks is not installed."; \
+		exit 1; \
+	fi; \
+	check() { \
+		pkg="$$1"; \
+		if ! luarocks list "$$pkg" 2>/dev/null | grep -q "$$pkg"; then \
+			echo "luarocks package $$pkg is NOT installed"; \
+			exit 1; \
+		fi; \
+	}; \
+	check dkjson; \
+	check argparse
+	
 luv:
 	git submodule update --init --recursive
 	LDFLAGS="-Wl,--gc-sections" $(MAKE) -C luv \
