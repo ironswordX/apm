@@ -12,7 +12,7 @@ git submodule update --init --recursive
 
 # build deps
 cd "$ROOT/luv/"
-BUILD_STATIC_LIBS=on WITH_LUA_ENGINE=Lua make
+CC="x86_64-alpine-linux-musl-cc" CXX="x86_64-alpine-linux-musl-g++" BUILD_STATIC_LIBS=on WITH_LUA_ENGINE=Lua make
 
 LIBLUV="$ROOT/luv/build/libluv.a"
 LIBUV="$ROOT/luv/build/deps/libuv/libuv.a"
@@ -20,7 +20,7 @@ LIBLUA="/usr/lib/lua5.5/liblua.a"
 
 # build
 cd "$ROOT/src/"
-luastatic apm.lua colors.lua \
+CC="x86_64-alpine-linux-musl-cc" CXX="x86_64-alpine-linux-musl-g++" luastatic apm.lua colors.lua \
   "$LIBLUA" \
   "$LIBLUV" \
   "$LIBUV" \
