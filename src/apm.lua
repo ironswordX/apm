@@ -1,4 +1,4 @@
-local version = "2.0.0"
+local version = "2.0.1"
 local uv = require("luv")
 --local apk = require("apk") -- apk-tool's lua bindings arent really helpful and are too much of a pain to compile
 local json = require("dkjson")
@@ -6,6 +6,10 @@ local json = require("dkjson")
 local argparse = require("argparse")
 local parser = argparse("apm", "apk (alpine package keeper) wrapper with QoL improvements")
 parser:command_target("command")
+parser:flag("-v --version"):action(function()
+	print("apm v" .. version)
+	os.exit(0)
+end)
 parser:flag("-v --verbose", "Show verbose/debug output"):args(0)
 parser:flag("--auth-helper", "Specify the tool to use for priveledge escalation", (uv.getuid() == 0 and "none" or "polkit"))
 	:args("1")
@@ -176,6 +180,40 @@ function createTransaction()
 			return true
 		end
 	end
+
+	-- command execution
+	function transaction:exec(cmd, callback)
+		transaction:verbose("Running command: " .. table.concat(cmd, " "))
+		local command = table.remove(cmd, 1)
+		uv.spawn(command, {
+			args = cmd,
+			stdio = { 0, 1, 2 }
+		}, callback)
+		uv.run()
+	end
+
+	function transaction:exec_privelidged(cmd, callback)
+		if args.auth_tool ~= "" then
+			transaction:verbose("Running command as privelidged: " .. args.auth_tool .. " " .. table.concat(cmd, " "))
+			uv.spawn(args.auth_tool, {
+				args = cmd,
+				stdio = { 0, 1, 2 }
+			}, callback)
+		else
+			if uv.getuid() ~= 0 then
+				transaction:fatal("Cannot use no privelidge escalation helper without running as root", 1)
+			else
+				transaction:verbose("Running command as root: " .. table.concat(cmd, " "))
+				local base = table.remove(cmd, 1)
+				uv.spawn(base, {
+					args = cmd,
+					stdio = { 0, 1, 2 }
+				}, callback)
+			end
+		end
+		uv.run()
+	end
+	
 	return transaction
 end
 
@@ -191,25 +229,6 @@ function split(str, sep)
   return result
 end
 
-function execute_as_privelidged(transaction, cmd, callback)
-	if args.auth_tool ~= "" then
-		uv.spawn(args.auth_tool, {
-			args = cmd,
-			stdio = { 0, 1, 2 }
-		}, callback)
-	else
-		if uv.getuid() ~= 0 then
-			transaction:fatal("Cannot use no privelidge escalation helper without running as root", 1)
-		else
-			local base = table.remove(cmd, 1)
-			uv.spawn(base, {
-				args = cmd,
-				stdio = { 0, 1, 2 }
-			}, callback)
-		end
-	end
-end
-
 if args.command == "install" then
 	local transaction = createTransaction()
 	local query = transaction:multi("Querying package index...")
@@ -218,14 +237,13 @@ if args.command == "install" then
 	transaction:log("The following packages will be installed: " .. table.concat(args.packages, ", "))
 	local prompt = transaction:confirm("Install them?", true)
 	if prompt then
-		execute_as_privelidged(transaction, { "apk", "add", table.unpack(args.packages) }, function(code, signal)
+		transaction:exec_privelidged({ "apk", "add", table.unpack(args.packages) }, function(code, signal)
 			if code == 0 then
 				transaction:finish("Transaction completed!")
 			else
 				transaction:fatal("Transaction failed with code: " .. code, code)
 			end
 		end)
-		uv.run()
 	else
 		transaction:fatal("Transaction aborted by user", 1)
 	end
@@ -237,7 +255,7 @@ elseif args.command == "uninstall" then
 	transaction:log("The following packages will be unstalled: " .. table.concat(args.packages, ", "))
 	local prompt = transaction:confirm("Uninstall them?", true)
 	if prompt then
-		execute_as_privelidged(transaction, { "apk", "del", table.unpack(args.packages) }, function(code, signal)
+		transaction:exec_privelidged({ "apk", "del", table.unpack(args.packages) }, function(code, signal)
 			if code == 0 then
 				transaction:finish("Transaction completed!")
 			else
@@ -251,7 +269,7 @@ elseif args.command == "uninstall" then
 elseif args.command == "update" then
 	local transaction = createTransaction()
 	transaction:log("Updating package index...")
-	execute_as_privelidged(transaction, { "apk", "update" }, function(code, signal)
+	transaction:exec_privelidged({ "apk", "update" }, function(code, signal)
 		if code == 0 then
 			if args.repos then
 				transaction:finish("Package index updated!")
@@ -260,16 +278,14 @@ elseif args.command == "update" then
 			transaction:fatal("Transaction failed with code: " .. code, code)
 		end
 	end)
-	uv.run()
 	if not args.repos then
 		transaction:log("Updating system...")
-		execute_as_privelidged(transaction, { "apk", "upgrade" }, function(code, signal)
+		transaction:exec_privelidged({ "apk", "upgrade" }, function(code, signal)
 			if code == 0 then
 				transaction:finish("System updated!")
 			else
 				transaction:fatal("Transaction failed with code: " .. code, code)
 			end
 		end)
-		uv.run()
 	end
 end
