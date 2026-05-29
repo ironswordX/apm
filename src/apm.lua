@@ -35,7 +35,17 @@ update:flag("-r --repos", "Update only the package repositories/index of the sys
 
 local args = parser:parse()
 
-local colors = require("colors")
+local colors = {}
+colors.RESET = "\27[0m"
+colors.BLACK = "\27[90m"
+colors.RED = "\27[91m"
+colors.GREEN = "\27[92m"
+colors.YELLOW = "\27[93m"
+colors.BLUE = "\27[94m"
+colors.MAGENTA = "\27[95m"
+colors.CYAN = "\27[96m"
+colors.WHITE = "\27[97m"
+
 local log = {
 	prefix = {
 		verbose = colors.CYAN .. "VERBOSE" .. colors.WHITE .. ": ",
@@ -231,6 +241,7 @@ if args.command == "install" then
 	local transaction = createTransaction()
 	local query = transaction:multi("Querying package index...")
 	local index = validate_packages_exist(args.packages, transaction)
+	os.exit(0)
 	query:finish("done")
 	transaction:log("The following packages will be installed: " .. table.concat(args.packages, ", "))
 	local prompt = transaction:confirm("Install them?", true)
