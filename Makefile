@@ -42,8 +42,6 @@ apm: luv
 	mkdir -p $(BUILD)
 	mkdir -p $(DIST)
 	
-	luac5.5 -s -o $(BUILD)/apm.luac src/apm.lua
-	
 	cd src/ && \
 	CC=$(MUSL_CC) CXX=$(MUSL_CXX) luastatic \
 		$(BUILD)/apm.luac \
